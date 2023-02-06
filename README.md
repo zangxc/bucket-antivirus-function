@@ -14,7 +14,7 @@ open source antivirus engine [ClamAV](http://www.clamav.net/)
 
 ## How It Works
 
-![architecture-diagram](../master/images/bucket-antivirus-function.png)
+![architecture-diagram](./images/bucket-antivirus-function.png)
 
 - Each time a new object is added to a bucket, S3 invokes the Lambda
 function to scan the object
@@ -189,7 +189,7 @@ To run the tests manually run `make pre_commit_tests` or `pre-commit run -a`.
 
 ### Python Tests
 
-The python tests in this repository use `unittest` and are run via the `nose` utility. To run them you will need
+The python tests in this repository use `unittest` and are run via the `pytest` utility. To run them you will need
 to install the developer resources and then run the tests:
 
 ```sh
@@ -221,6 +221,46 @@ For the Update lambda you can run:
 ```sh
 direnv allow
 make archive update
+```
+
+### Dockerized ClamAV Daemon Scan
+The latest version of this lambda supports scanning using the clamAV daemon inside a docker image. To build the docker image, run
+```shell
+make dockerized-archive-with-db
+```
+To test scan, run this after setting the correct environment variables in the previous step:
+```shell
+make scand
+```
+The real benefit of using the clamAV Daemon scan will be shown on the subsequent scan after it starts.
+To manually spin up the dockerized lambda and interact with it, you can run:
+```shell
+docker run --rm \
+  -e AV_DEFINITION_S3_BUCKET \
+  -e AV_DEFINITION_S3_PREFIX \
+  -e AV_DELETE_INFECTED_FILES \
+  -e AV_PROCESS_ORIGINAL_VERSION_ONLY \
+  -e AV_SCAN_START_METADATA \
+  -e AV_SCAN_START_SNS_ARN \
+  -e AV_SIGNATURE_METADATA \
+  -e AV_STATUS_CLEAN \
+  -e AV_STATUS_INFECTED \
+  -e AV_STATUS_METADATA \
+  -e AV_STATUS_SNS_ARN \
+  -e AV_STATUS_SNS_PUBLISH_CLEAN \
+  -e AV_STATUS_SNS_PUBLISH_INFECTED \
+  -e AV_TIMESTAMP_METADATA \
+  -e AWS_ACCESS_KEY_ID \
+  -e AWS_DEFAULT_REGION \
+  -e AWS_REGION \
+  -e AWS_SECRET_ACCESS_KEY \
+  -e AWS_SESSION_TOKEN \
+  --memory="${MEM}" --memory-swap="${MEM}" --cpus="${CPUS}" --name="${NAME}" \
+  -p 9000:8080 bucket-antivirus-function-clamd
+
+export EVENT="{\"Records\": [{\"s3\": {\"bucket\": {\"name\": \"${TEST_BUCKET}\"}, \"object\": {\"key\": \"${TEST_KEY}\"}}}]}"
+curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d "$EVENT"
+
 ```
 
 ## License

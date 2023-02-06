@@ -21,8 +21,9 @@ import unittest
 
 import boto3
 import botocore.session
-from botocore.stub import Stubber
+from botocore.stub import Stubber, ANY
 import mock
+from unittest.mock import MagicMock
 
 from clamav import RE_SEARCH_DIR
 from clamav import scan_output_to_json
@@ -43,6 +44,8 @@ class TestClamAV(unittest.TestCase):
 
         # Clients and Resources
         self.s3 = boto3.resource("s3")
+        self.mock_bucket = self.s3.Bucket(self.s3_bucket_name)
+        self.mock_bucket.download_file = MagicMock(return_value=None)
         self.s3_client = botocore.session.get_session().create_client("s3")
         self.sns_client = botocore.session.get_session().create_client(
             "sns", region_name="us-west-2"
@@ -219,15 +222,15 @@ class TestClamAV(unittest.TestCase):
         expected_to_download = {
             "bytecode": {
                 "local_path": "/tmp/clamav_defs/bytecode.cvd",
-                "s3_path": "clamav_defs/bytecode.cvd",
+                "s3_path": "{}/bytecode.cvd".format(AV_DEFINITION_S3_PREFIX),
             },
             "daily": {
                 "local_path": "/tmp/clamav_defs/daily.cvd",
-                "s3_path": "clamav_defs/daily.cvd",
+                "s3_path": "{}/daily.cvd".format(AV_DEFINITION_S3_PREFIX),
             },
             "main": {
                 "local_path": "/tmp/clamav_defs/main.cvd",
-                "s3_path": "clamav_defs/main.cvd",
+                "s3_path": "{}/main.cvd".format(AV_DEFINITION_S3_PREFIX),
             },
         }
         with s3_stubber:
@@ -281,7 +284,7 @@ class TestClamAV(unittest.TestCase):
         expected_to_download = {}
         with s3_stubber:
             to_download = update_defs_from_s3(
-                self.s3_client, self.s3_bucket_name, AV_DEFINITION_S3_PREFIX
+                self.s3_client, self.mock_bucket, self.s3_bucket_name, AV_DEFINITION_S3_PREFIX
             )
             self.assertEquals(expected_to_download, to_download)
 
@@ -334,19 +337,19 @@ class TestClamAV(unittest.TestCase):
         expected_to_download = {
             "bytecode": {
                 "local_path": "/tmp/clamav_defs/bytecode.cld",
-                "s3_path": "clamav_defs/bytecode.cld",
+                "s3_path": "{}/bytecode.cld".format(AV_DEFINITION_S3_PREFIX),
             },
             "daily": {
                 "local_path": "/tmp/clamav_defs/daily.cld",
-                "s3_path": "clamav_defs/daily.cld",
+                "s3_path": "{}/daily.cld".format(AV_DEFINITION_S3_PREFIX),
             },
             "main": {
                 "local_path": "/tmp/clamav_defs/main.cld",
-                "s3_path": "clamav_defs/main.cld",
+                "s3_path": "{}/main.cld".format(AV_DEFINITION_S3_PREFIX),
             },
         }
         with s3_stubber:
             to_download = update_defs_from_s3(
-                self.s3_client, self.s3_bucket_name, AV_DEFINITION_S3_PREFIX
+                self.s3_client, self.mock_bucket, self.s3_bucket_name, AV_DEFINITION_S3_PREFIX
             )
             self.assertEquals(expected_to_download, to_download)

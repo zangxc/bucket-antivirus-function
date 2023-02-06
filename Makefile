@@ -38,6 +38,20 @@ archive: clean  ## Create the archive for AWS lambda
 	mkdir -p ./build/
 	docker run -v $(current_dir)/build:/opt/mount --rm --entrypoint cp bucket-antivirus-function:latest /opt/app/build/lambda.zip /opt/mount/lambda.zip
 
+.PHONY: dockerized-archive
+dockerized-archive: clean
+	mkdir -p ./build/
+	docker build -f ./DockerfileClamd -t  bucket-antivirus-function-clamd .
+
+.PHONY: dockerized-archive-with-db
+dockerized-archive-with-db: clean
+	mkdir -p ./build/
+	mkdir -p resources/db/
+	pip3 install cvdupdate
+	cvd config set --dbdir resources/db/
+	cvd update
+	docker build -f ./DockerfileClamd -t  bucket-antivirus-function-clamd .
+
 .PHONY: pre_commit_install  ## Ensure that pre-commit hook is installed and kept up to date
 pre_commit_install: .git/hooks/pre-commit ## Ensure pre-commit is installed
 .git/hooks/pre-commit: /usr/local/bin/pre-commit
@@ -51,16 +65,20 @@ pre_commit_tests: ## Run pre-commit tests
 
 .PHONY: test
 test: clean  ## Run python tests
-	nosetests
+	pytests
 
 .PHONY: coverage
 coverage: clean  ## Run python tests with coverage
-	nosetests --with-coverage
+	pytest --with-coverage
 
 .PHONY: scan
-scan: ./build/lambda.zip ## Run scan function locally
+scan: archive ## Run scan function locally
 	scripts/run-scan-lambda $(TEST_BUCKET) $(TEST_KEY)
 
+.PHONY: scand
+scand: dockerized-archive-with-db ## Run scan function locally using dockerized clamd
+	scripts/run-clamd-scan-lambda $(TEST_BUCKET) $(TEST_KEY)
+
 .PHONY: update
-update: ./build/lambda.zip ## Run update function locally
+update: archive ## Run update function locally
 	scripts/run-update-lambda

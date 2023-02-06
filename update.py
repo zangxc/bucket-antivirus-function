@@ -28,19 +28,13 @@ from common import get_timestamp
 
 def lambda_handler(event, context):
     s3 = boto3.resource("s3", endpoint_url=S3_ENDPOINT)
+    av_def_bucket = s3.Bucket(AV_DEFINITION_S3_BUCKET)
     s3_client = boto3.client("s3", endpoint_url=S3_ENDPOINT)
 
     print("Script starting at %s\n" % (get_timestamp()))
-    to_download = clamav.update_defs_from_s3(
-        s3_client, AV_DEFINITION_S3_BUCKET, AV_DEFINITION_S3_PREFIX
+    clamav.update_defs_from_s3(
+        s3_client, av_def_bucket, AV_DEFINITION_S3_BUCKET, AV_DEFINITION_S3_PREFIX
     )
-
-    for download in to_download.values():
-        s3_path = download["s3_path"]
-        local_path = download["local_path"]
-        print("Downloading definition file %s from s3://%s" % (local_path, s3_path))
-        s3.Bucket(AV_DEFINITION_S3_BUCKET).download_file(s3_path, local_path)
-        print("Downloading definition file %s complete!" % (local_path))
 
     clamav.update_defs_from_freshclam(AV_DEFINITION_PATH, CLAMAVLIB_PATH)
     # If main.cvd gets updated (very rare), we will need to force freshclam

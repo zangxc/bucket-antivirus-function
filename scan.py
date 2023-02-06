@@ -37,11 +37,28 @@ from common import AV_STATUS_SNS_ARN
 from common import AV_STATUS_SNS_PUBLISH_CLEAN
 from common import AV_STATUS_SNS_PUBLISH_INFECTED
 from common import AV_TIMESTAMP_METADATA
+from common import ENABLE_CLAMD
 from common import SNS_ENDPOINT
 from common import S3_ENDPOINT
 from common import create_dir
 from common import get_timestamp
 
+s3 = boto3.resource("s3", endpoint_url=S3_ENDPOINT)
+av_def_bucket = s3.Bucket(AV_DEFINITION_S3_BUCKET)
+s3_client = boto3.client("s3", endpoint_url=S3_ENDPOINT)
+sns_client = boto3.client("sns", endpoint_url=SNS_ENDPOINT)
+sts_client = boto3.client("sts", endpoint_url=STS_ENDPOINT)
+ENV = os.getenv("ENV", "")
+EVENT_SOURCE = os.getenv("EVENT_SOURCE", "S3")
+
+if ENABLE_CLAMD:
+    clamav.update_defs_from_s3(
+         s3_client, av_def_bucket, AV_DEFINITION_S3_BUCKET, AV_DEFINITION_S3_PREFIX
+    )
+    print("starting clamd " + str(get_timestamp()))
+    os.system("/usr/sbin/clamd")
+    os.system("clamdscan --ping 3:1")
+    print("clamd started " + str(get_timestamp()))
 
 def event_object(event, event_source="s3"):
 
@@ -201,13 +218,6 @@ def sns_scan_results(
 
 
 def lambda_handler(event, context):
-    s3 = boto3.resource("s3", endpoint_url=S3_ENDPOINT)
-    s3_client = boto3.client("s3", endpoint_url=S3_ENDPOINT)
-    sns_client = boto3.client("sns", endpoint_url=SNS_ENDPOINT)
-
-    # Get some environment variables
-    ENV = os.getenv("ENV", "")
-    EVENT_SOURCE = os.getenv("EVENT_SOURCE", "S3")
 
     start_time = get_timestamp()
     print("Script starting at %s\n" % (start_time))
@@ -225,16 +235,10 @@ def lambda_handler(event, context):
     create_dir(os.path.dirname(file_path))
     s3_object.download_file(file_path)
 
-    to_download = clamav.update_defs_from_s3(
-        s3_client, AV_DEFINITION_S3_BUCKET, AV_DEFINITION_S3_PREFIX
+    clamav.update_defs_from_s3(
+        s3_client, av_def_bucket, AV_DEFINITION_S3_BUCKET, AV_DEFINITION_S3_PREFIX
     )
 
-    for download in to_download.values():
-        s3_path = download["s3_path"]
-        local_path = download["local_path"]
-        print("Downloading definition file %s from s3://%s" % (local_path, s3_path))
-        s3.Bucket(AV_DEFINITION_S3_BUCKET).download_file(s3_path, local_path)
-        print("Downloading definition file %s complete!" % (local_path))
     scan_result, scan_signature = clamav.scan_file(file_path)
     print(
         "Scan of s3://%s resulted in %s\n"

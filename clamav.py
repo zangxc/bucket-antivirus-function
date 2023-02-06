@@ -24,6 +24,7 @@ import boto3
 import botocore
 from pytz import utc
 
+from common import AV_DEFINITION_S3_BUCKET
 from common import AV_DEFINITION_S3_PREFIX, S3_ENDPOINT
 from common import AV_DEFINITION_PATH
 from common import AV_DEFINITION_FILE_PREFIXES
@@ -34,6 +35,8 @@ from common import AV_STATUS_CLEAN
 from common import AV_STATUS_INFECTED
 from common import CLAMAVLIB_PATH
 from common import CLAMSCAN_PATH
+from common import CLAMDSCAN_PATH
+from common import ENABLE_CLAMD
 from common import FRESHCLAM_PATH
 from common import create_dir
 
@@ -47,7 +50,7 @@ def current_library_search_path():
     return rd_ld.findall(ld_verbose)
 
 
-def update_defs_from_s3(s3_client, bucket, prefix):
+def update_defs_from_s3(s3_client, s3_bucket, bucket, prefix):
     create_dir(AV_DEFINITION_PATH)
     to_download = {}
     for file_prefix in AV_DEFINITION_FILE_PREFIXES:
@@ -73,6 +76,12 @@ def update_defs_from_s3(s3_client, bucket, prefix):
                     "s3_path": s3_path,
                     "local_path": local_path,
                 }
+    for download in to_download.values():
+        s3_path = download["s3_path"]
+        local_path = download["local_path"]
+        print("Downloading definition file %s from s3://%s" % (local_path, s3_path))
+        s3_bucket.download_file(s3_path, local_path)
+        print("Downloading definition file %s complete!" % (local_path))
     return to_download
 
 
@@ -187,9 +196,10 @@ def scan_output_to_json(output):
 def scan_file(path):
     av_env = os.environ.copy()
     av_env["LD_LIBRARY_PATH"] = CLAMAVLIB_PATH
-    print("Starting clamscan of %s." % path)
+    clam_binary = CLAMDSCAN_PATH if ENABLE_CLAMD else CLAMSCAN_PATH
+    print("Starting $s on %s." % (clam_binary, path))
     av_proc = subprocess.Popen(
-        [CLAMSCAN_PATH, "-v", "-a", "--stdout", "-d", AV_DEFINITION_PATH, path],
+        [clam_binary, "-v", "-a", "--stdout", "-d", AV_DEFINITION_PATH, path],
         stderr=subprocess.STDOUT,
         stdout=subprocess.PIPE,
         env=av_env,

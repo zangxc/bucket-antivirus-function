@@ -1,0 +1,26 @@
+FROM public.ecr.aws/lambda/python:3.8
+
+RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+RUN yum install -y clamav freshclam clamav-update clamd
+RUN pip install clamd
+
+COPY  ./resources/clamd.conf /etc/clamd.d/scan.conf
+# todo: rely on s3 instead of files in image
+COPY  resources/db/*.cvd /tmp/clamav_defs/
+RUN chmod 755 /tmp/clamav_defs/*.cvd
+
+RUN mkdir -p /run/clamd.scan/
+RUN chmod 755 /run/clamd.scan/
+#COPY  ./resources/clamav/freshclam.conf ${LAMBDA_TASK_ROOT}/bin/freshclam.conf
+RUN mkdir -p ${LAMBDA_TASK_ROOT}/bin/
+RUN cp /etc/freshclam.conf ${LAMBDA_TASK_ROOT}/bin/freshclam.conf
+
+# Copy function code
+COPY requirements.txt ${LAMBDA_TASK_ROOT}
+RUN pip3 install -r requirements.txt
+COPY scan.py update.py clamav.py common.py metrics.py ${LAMBDA_TASK_ROOT}
+
+ENV ENABLE_CLAMD=True
+
+# Set the CMD to your handler (could also be done as a parameter override outside of the Dockerfile)
+CMD [ "scan.lambda_handler" ]
